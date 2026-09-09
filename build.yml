@@ -1,0 +1,47 @@
+name: Build ESP32 Wi-Fi Toolkit
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Configure ESP32 package index
+        run: |
+          arduino-cli config init
+          arduino-cli config add board_manager.additional_urls \
+            https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+
+      - name: Install ESP32 core
+        run: arduino-cli core install esp32:esp32@3.0.7
+
+      - name: Prepare Arduino sketch directory
+        run: |
+          rm -rf .ci/ESP32_WiFi_Security_Toolkit
+          mkdir -p .ci/ESP32_WiFi_Security_Toolkit
+          cp *.ino *.h .ci/ESP32_WiFi_Security_Toolkit/
+
+      - name: Compile sketch
+        run: |
+          mkdir -p build
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            --warnings all \
+            --output-dir build \
+            .ci/ESP32_WiFi_Security_Toolkit
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: esp32-wifi-toolkit-firmware
+          path: build/*
