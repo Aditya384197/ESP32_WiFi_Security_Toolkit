@@ -22,8 +22,6 @@ jobs:
           arduino-cli config init
           arduino-cli config add board_manager.additional_urls \
             https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          # GitHub-hosted runners occasionally receive a transient TCP reset
-          # from the package-index CDN. Retry the complete index update.
           for attempt in 1 2 3 4 5; do
             if arduino-cli core update-index; then
               exit 0
@@ -53,21 +51,37 @@ jobs:
 
       - name: Prepare Arduino sketch directory
         run: |
-          rm -rf .ci/ESP32_WiFi_Security_Toolkit
-          mkdir -p .ci/ESP32_WiFi_Security_Toolkit
+          set -euo pipefail
+          rm -rf .ci/ESP32_WiFi_Security_Toolkit build
+          mkdir -p .ci/ESP32_WiFi_Security_Toolkit build
           cp *.ino *.h .ci/ESP32_WiFi_Security_Toolkit/
 
-      - name: Compile sketch
+      - name: Compile sketch and create complete flash image
         run: |
-          mkdir -p build
+          set -euo pipefail
           arduino-cli compile \
             --fqbn esp32:esp32:esp32 \
             --warnings all \
             --output-dir build \
             .ci/ESP32_WiFi_Security_Toolkit
 
+          MERGED="build/ESP32_WiFi_Security_Toolkit.merged.bin"
+          FLASH_ARGS="build/flash_args"
+
+          test -s "$MERGED"
+          test -s "$FLASH_ARGS"
+
+          # Make the intended complete image unmistakable for manual flashing.
+          cp -f "$MERGED" "build/ESP32_WiFi_Security_Toolkit_FLASH_0x0.bin"
+
+          echo "Complete flash image: build/ESP32_WiFi_Security_Toolkit_FLASH_0x0.bin"
+          echo "Flash it at 0x0 (not 0x1000 or 0x10000)."
+          echo "The image contains bootloader, partition table, boot_app0 and application."
+
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
           name: esp32-wifi-toolkit-firmware
-          path: build/*
+          path: |
+            build/ESP32_WiFi_Security_Toolkit_FLASH_0x0.bin
+            build/flash_args
