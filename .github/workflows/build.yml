@@ -8,6 +8,7 @@ on:
 jobs:
   compile:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,13 +18,38 @@ jobs:
 
       - name: Configure ESP32 package index
         run: |
+          set -euo pipefail
           arduino-cli config init
           arduino-cli config add board_manager.additional_urls \
             https://espressif.github.io/arduino-esp32/package_esp32_index.json
-          arduino-cli core update-index
+          # GitHub-hosted runners occasionally receive a transient TCP reset
+          # from the package-index CDN. Retry the complete index update.
+          for attempt in 1 2 3 4 5; do
+            if arduino-cli core update-index; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "ESP32 package index could not be downloaded after 5 attempts."
+              exit 1
+            fi
+            echo "Index update failed (attempt $attempt/5); retrying..."
+            sleep $((attempt * 10))
+          done
 
       - name: Install ESP32 core
-        run: arduino-cli core install esp32:esp32@3.0.7
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if arduino-cli core install esp32:esp32@3.0.7; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "ESP32 core installation failed after 3 attempts."
+              exit 1
+            fi
+            echo "Core installation failed (attempt $attempt/3); retrying..."
+            sleep $((attempt * 10))
+          done
 
       - name: Prepare Arduino sketch directory
         run: |
