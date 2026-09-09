@@ -65,13 +65,18 @@ jobs:
             --output-dir build \
             .ci/ESP32_WiFi_Security_Toolkit
 
-          MERGED="build/ESP32_WiFi_Security_Toolkit.merged.bin"
-          FLASH_ARGS="build/flash_args"
+          # Arduino-ESP32 names the merged image from the actual sketch filename.
+          # Do not hard-code the basename: CLI/core versions can emit
+          # <sketch>.ino.merged.bin or another valid *.merged.bin name.
+          MERGED="$(find build -maxdepth 1 -type f -name '*.merged.bin' -size +0c | head -n 1)"
+          if [ -z "$MERGED" ]; then
+            echo "ERROR: Arduino-ESP32 did not produce a merged flash image."
+            echo "Build directory contents:"
+            find build -maxdepth 1 -type f -printf '%f\n' | sort
+            exit 1
+          fi
 
-          test -s "$MERGED"
-          test -s "$FLASH_ARGS"
-
-          # Make the intended complete image unmistakable for manual flashing.
+          # Make the complete image unmistakable for manual flashing.
           cp -f "$MERGED" "build/ESP32_WiFi_Security_Toolkit_FLASH_0x0.bin"
 
           echo "Complete flash image: build/ESP32_WiFi_Security_Toolkit_FLASH_0x0.bin"
@@ -84,4 +89,3 @@ jobs:
           name: esp32-wifi-toolkit-firmware
           path: |
             build/ESP32_WiFi_Security_Toolkit_FLASH_0x0.bin
-            build/flash_args
